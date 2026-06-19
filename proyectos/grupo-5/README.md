@@ -7,7 +7,7 @@ Este repositorio contiene el desarrollo del **Proyecto Final** para el curso de 
 * Ignacio Hidalgo — *(GitHub: @IgHB27)*
 * Sergio Rebolledo — *(GitHub: @sergiorebolledo)*
 * Alejandro Gómez — *(GitHub: @OrPhery1)*
-* [Nombre Integrante 5] — *(GitHub: @usuario5)*
+* Pablo Mellado — *(GitHub: NoBugPablito)*
 * [Nombre Integrante 6] — *(GitHub: @usuario6)*
 
 ---
