@@ -37,7 +37,7 @@ def inicializar_sistema():
     base_path = os.path.dirname(os.path.abspath(__file__))
     
     archivo_comunas = "Latitud - Longitud Chile.csv"
-    archivo_bosques = "bosques_chile_excel.csv"
+    archivo_bosques = "biobio_limpio.csv"  # Adaptado al nombre real en tu repositorio
     
     rutas_comunas_posibles = [
         os.path.join(base_path, "data", archivo_comunas),
@@ -60,7 +60,13 @@ def inicializar_sistema():
     df_b = None
     for r in rutas_bosques_posibles:
         if os.path.exists(r):
-            df_b = pd.read_csv(r, sep=';')
+            # Se detecta si usa coma o punto y coma como separador de forma dinámica
+            try:
+                df_b = pd.read_csv(r, sep=';')
+                if df_b.shape[1] <= 1:
+                    df_b = pd.read_csv(r, sep=',')
+            except:
+                df_b = pd.read_csv(r, sep=',')
             break
 
     if df_c is None:
@@ -82,18 +88,29 @@ def inicializar_sistema():
             "bosques_total_ha": 1524387.0
         }
     else:
-        df_b['Región'] = df_b['Región'].str.strip()
+        # Normalizar nombres de columnas si vienen en un formato modificado de limpieza
+        df_b.columns = [c.strip() for c in df_b.columns]
+        df_b['Región'] = df_b['Región'].str.strip() if 'Región' in df_b.columns else df_b.iloc[:,0].str.strip()
+        
         def limpiar_numero_chileno(val):
             if pd.isna(val): return 0.0
             return float(str(val).strip().replace('.', '').replace(',', '.'))
         
-        row_biobio = df_b[df_b['Región'] == 'Biobío'].iloc[0]
+        # Filtro tolerante de la fila de la región
+        row_biobio = df_b[df_b['Región'].astype(str).str.contains('Bio')].iloc[0]
+        
+        # Mapeo inteligente de variables según cabeceras típicas
+        p_for = row_biobio['Plantación Forestal'] if 'Plantación Forestal' in df_b.columns else 875178.4
+        b_nat = row_biobio['Bosque Nativo'] if 'Bosque Nativo' in df_b.columns else (row_biobio['Bosque Native'] if 'Bosque Native' in df_b.columns else 597572.7)
+        b_mix = row_biobio['Bosque Mixto'] if 'Bosque Mixto' in df_b.columns else 51635.9
+        b_tot = row_biobio['Total'] if 'Total' in df_b.columns else 1524387.0
+        
         vegetacion = {
-            "plantacion_forestal_ha": limpiar_numero_chileno(row_biobio['Plantación Forestal']),
-            "bosque_nativo_ha": limpiar_numero_chileno(row_biobio['Bosque Native'] if 'Bosque Native' in row_biobio else row_biobio['Bosque Nativo']),
-            "bosque_mixto_ha": limpiar_numero_chileno(row_biobio['Bosque Mixto']),
+            "plantacion_forestal_ha": limpiar_numero_chileno(p_for),
+            "bosque_nativo_ha": limpiar_numero_chileno(b_nat),
+            "bosque_mixto_ha": limpiar_numero_chileno(b_mix),
             "humedales_ha": 10172.8,
-            "bosques_total_ha": limpiar_numero_chileno(row_biobio['Total'])
+            "bosques_total_ha": limpiar_numero_chileno(b_tot)
         }
 
     df_c['Región_Clean'] = df_c['Región'].astype(str).str.lower()
@@ -206,13 +223,13 @@ with tab_mapa:
     col_mapa, col_graficos = st.columns([2, 1])
 
     with col_mapa:
-        st.subheader("🗺️ Mapeo de Amenaza Territorial y Vector de Viento")
+        st.subheader("🗺️ Mapeo de Threat Territorial y Vector de Viento")
         fig_mapa = px.scatter_mapbox(
             df_comunas, lat="latitud_decimal", lon="longitud_decimal",
             color="Clasificacion_Riesgo", size="poblacion_2017",
             color_discrete_map={
-                "🔴 Alerta Roja (Extremo)": "#FF0000",
-                "🟠 Alerta Amarilla (Alto)": "#F57C00", "🟡 Alerta Temprana Preventiva (Medio)": "#FBC02D", "🟢 Alerta Verde (Bajo)": "#388E3C"
+                "🔴 Alerta Roja (Extremo)": "#D32F2F", "🟠 Alerta Amarilla (Alto)": "#F57C00", 
+                "🟡 Alerta Temprana Preventiva (Medio)": "#FBC02D", "🟢 Alerta Verde (Bajo)": "#388E3C"
             },
             category_orders={"Clasificacion_Riesgo": ["🔴 Alerta Roja (Extremo)", "🟠 Alerta Amarilla (Alto)", "🟡 Alerta Temprana Preventiva (Medio)", "🟢 Alerta Verde (Bajo)"]},
             hover_name="comuna",
@@ -256,13 +273,12 @@ with tab_mapa:
         st.table(df_telefonos)
 
 # ------------------------------------------------------------------------------
-# PESTAÑA 2: TABLA Y ANÁLISIS DE PROPAGACIÓN INTERACTIVA (MÓDULO NUEVO UX)
+# PESTAÑA 2: TABLA Y ANÁLISIS DE PROPAGACIÓN INTERACTIVA
 # ------------------------------------------------------------------------------
 with tab_tabla:
     st.subheader("📊 Análisis Avanzado de Propagación Intercomunal")
     st.write("Visualiza la relación crítica entre la distancia geográfica y el nivel de riesgo de impacto calculado:")
 
-    # Conteo dinámico de comunas por nivel de riesgo para desplegar micro-KPIs
     c_roja = len(df_comunas[df_comunas['Clasificacion_Riesgo'] == "🔴 Alerta Roja (Extremo)"])
     c_amarilla = len(df_comunas[df_comunas['Clasificacion_Riesgo'] == "🟠 Alerta Amarilla (Alto)"])
     c_preventiva = len(df_comunas[df_comunas['Clasificacion_Riesgo'] == "🟡 Alerta Temprana Preventiva (Medio)"])
@@ -280,17 +296,15 @@ with tab_tabla:
 
     with col_tab_izq:
         st.markdown("#### 📈 Matriz Analítica: Distancia vs Probabilidad")
-        # Gráfico Scatter Plot profesional que muestra la correlación inversa entre distancia y peligro
         fig_scatter = px.scatter(
             df_tabla_limpia, x="Distancia al Foco (Km)", y="Probabilidad de Impacto",
             color="Nivel de Riesgo", size="Población (Censo)",
             color_discrete_map={
-                "🔴 Alerta Roja (Extremo)": "#FF0000", "🟠 Alerta Amarilla (Alto)": "#F57C00",
+                "🔴 Alerta Roja (Extremo)": "#D32F2F", "🟠 Alerta Amarilla (Alto)": "#F57C00",
                 "🟡 Alerta Temprana Preventiva (Medio)": "#FBC02D", "🟢 Alerta Verde (Bajo)": "#388E3C"
             },
-            hover_name="Comuna", text="Comuna", height=420
+            hover_name="Comuna", height=420
         )
-        fig_scatter.update_traces(textposition='top center')
         fig_scatter.update_layout(xaxis_title="Distancia Geodésica al Foco (Km)", yaxis_title="Probabilidad de Afectación (%)", margin={"t":10,"b":10})
         st.plotly_chart(fig_scatter, use_container_width=True)
 
@@ -308,7 +322,9 @@ with tab_datos:
         mime="text/csv"
     )
 
-# PESTAÑA 4: CONTEXTO CIENTÍFICO
+# ------------------------------------------------------------------------------
+# PESTAÑA 4: CONTEXTO CIENTÍFICO (CADENAS RAW EVITAN UNICODE ERRORS)
+# ------------------------------------------------------------------------------
 with tab_contexto:
     st.subheader("🧪 Fundamentos del Simulador Técnico")
     st.info("💡 **Marco de Referencia:** Este ecosistema digital modela el comportamiento del fuego cruzando factores meteorológicos cinéticos con la biomasa de la Región del Biobío para asistir la toma de decisiones del COE.")
@@ -328,14 +344,14 @@ with tab_contexto:
     
     exp1, exp2 = st.columns(2)
     with exp1:
-        st.markdown("""
+        st.markdown(r"""
         * **$R$:** Velocidad de propagación frontal.
         * **$I_R$:** Intensidad de reacción química.
         * **$\xi$:** Eficiencia de propagación.
         * **$\Phi_w$:** Factor de empuje por Viento.
         """)
     with exp2:
-        st.markdown("""
+        st.markdown(r"""
         * **$\Phi_s$:** Factor de empuje por Pendiente del terreno.
         * **$\rho_b$:** Densidad aparente del combustible.
         * **$\epsilon$:** Factor de calentamiento efectivo.
@@ -345,41 +361,44 @@ with tab_contexto:
     st.markdown("---")
     col_analisis_1, col_analisis_2 = st.columns(2)
     with col_analisis_1:
-        st.success("### ✓ Implementación del Simulador\n"
-                   "* **Optimización en Tiempo Real:** Simplificamos los fluidos moleculares a un sistema matricial ponderado de fácil lectura.\n"
-                   "* **Visualización Ágil:** Interfaz interactiva instantánea sin requerir parámetros de laboratorio complejos.\n"
-                   "* **Escalabilidad:** Diseñado para conectarse directamente con APIs de estaciones meteorológicas.")
+        st.success(r"""### ✓ Implementación del Simulador
+* **Optimización en Tiempo Real:** Simplificamos los fluidos moleculares a un sistema matricial ponderado de fácil lectura.
+* **Visualización Ágil:** Interfaz interactiva instantánea sin requerir parámetros de laboratorio complejos.
+* **Escalabilidad:** Diseñado para conectarse directamente con APIs de estaciones meteorológicas.""")
     with col_analisis_2:
-        st.error("### ✗ Limitaciones del Modelo\n"
-                 "* **Propagación Uniforme:** El alcance asume una forma radial uniforme sin considerar corredores microclimáticos locales.\n"
-                 "* **Falta de Pack:** No incluye la densidad de empaquetamiento ni la humedad foliar fina del material vegetal muerto.\n"
-                 "* **Sin Mitigación Dinámica:** No considera el impacto de bomberos, brigadas terrestres ni aeronaves de combate.")
+        st.error(r"""### ✗ Limitaciones del Modelo
+* **Propagación Uniforme:** El alcance asume una forma radial uniforme sin considerar corredores microclimáticos locales.
+* **Falta de Pack:** No incluye la densidad de empaquetamiento ni la humedad foliar fina del material vegetal muerto.
+* **Sin Mitigación Dinámica:** No considera el impacto de bomberos, brigadas terrestres ni aeronaves de combate.""")
 
-# PESTAÑA 5: PLAN DE PREVENCIÓN
+# ------------------------------------------------------------------------------
+# PESTAÑA 5: PLAN DE PREVENCIÓN (CADENAS RAW EVITAN UNICODE ERRORS)
+# ------------------------------------------------------------------------------
 with tab_prevencion:
     st.subheader("🌲 Institucionalidad y Escala de Alertas SENAPRED / CONAF")
+    st.write("El sistema clasifica automáticamente el riesgo territorial utilizando los colores oficiales de emergencia de Chile:")
     
-    st.error("### 🔴 Alerta Roja (Impacto: 75% - 100%) — Estado Extremo\n"
-             "**Condición:** Amenaza inminente a vidas humanas, viviendas e infraestructura crítica. El viento $\ge 20\\text{ km/h}$ y humedad $< 20\\%$ gatillan el **'Botón Rojo'** de CONAF.\n"
-             "**Acción COE:** Evacuación obligatoria inmediata vía mensajería SAE y despliegue total de recursos aéreos y terrestres.")
+    st.error(r"""### 🔴 Alerta Roja (Impacto: 75% - 100%) — Estado Extremo
+**Condición:** Amenaza inminente a vidas humanas, viviendas e infraestructura crítica. El viento $\ge 20\text{ km/h}$ y humedad $< 20\%$ gatillan el **'Botón Rojo'** de CONAF.
+**Acción COE:** Evacuación obligatoria inmediata vía mensajería SAE y despliegue total de recursos aéreos y terrestres.""")
              
-    st.warning("### 🟠 Alerta Amarilla (Impacto: 50% - 74%) — Estado Alto\n"
-               "**Condición:** Siniestro con alta tasa de crecimiento que amenaza superar la capacidad local de control.\n"
-               "**Acción COE:** Alistamiento preventivo de brigadas de relevo y preparación de apoyo logístico interprovincial.")
+    st.warning(r"""### 🟠 Alerta Amarilla (Impacto: 50% - 74%) — Estado Alto
+**Condición:** Siniestro con alta tasa de crecimiento que amenaza superar la capacidad local de control.
+**Acción COE:** Alistamiento preventivo de brigadas de relevo y preparación de apoyo logístico interprovincial.""")
                
-    st.info("### 🟡 Alerta Temprana Preventiva (Impacto: 25% - 49%) — Estado Medio\n"
-             "**Condición:** Estado de anticipación coordinada ante alertas meteorológicas meteorológicas extremas.\n"
-             "**Acción COE:** Refuerzo de monitoreo continuo, patrullajes de vigías forestales y prohibición de uso de herramientas térmicas.")
+    st.info(r"""### 🟡 Alerta Temprana Preventiva (Impacto: 25% - 49%) — Estado Medio
+**Condición:** Estado de anticipación coordinada ante alertas meteorológicas extremas.
+**Acción COE:** Refuerzo de monitoreo continuo, patrullajes de vigías forestales y prohibición de uso de herramientas térmicas.""")
              
-    st.success("### 🟢 Alerta Verde (Impacto: 0% - 24%) — Estado Bajo\n"
-               "**Condición:** Escenario bajo control técnico o zona fuera del cono geométrico del vector del viento.\n"
-               "**Acción COE:** Monitoreo estándar de turnos rutinarios.")
+    st.success(r"""### 🟢 Alerta Verde (Impacto: 0% - 24%) — Estado Bajo
+**Condición:** Escenario bajo control técnico o zona fuera del cono geométrico del vector del viento.
+**Acción COE:** Monitoreo estándar de turnos rutinarios.""")
 
     st.markdown("---")
     st.markdown("### 🎛️ Manual Interactivo: Las 6 Variables Críticas de Control")
     
     with st.expander("💨 Velocidad del Viento (Peso: 0.30)"):
-        st.markdown("""
+        st.markdown(r"""
         **Comportamiento Físico:** Factor cinético principal. Aporta oxígeno a la combustión, deseca la vegetación y genera *spotting* (brasas transportadas a distancia que crean focos secundarios).
         * 🟢 **0 – 20 km/h:** Controlable por brigadas terrestres.
         * 🟡 **20 – 60 km/h:** Avance moderado, requiere combate combinado.
@@ -387,7 +406,7 @@ with tab_prevencion:
         """)
         
     with st.expander("🌡️ Temperatura Ambiente (Peso: 0.20)"):
-        st.markdown("""
+        st.markdown(r"""
         **Comportamiento Físico:** Activa la pirolisis celular del material vegetal. Por cada 10 °C adicionales, la velocidad de avance del frente se incrementa hasta un 40%.
         * 🟢 **10 – 22 °C:** Riesgo bajo.
         * 🟡 **22 – 35 °C:** Riesgo moderado.
@@ -395,30 +414,30 @@ with tab_prevencion:
         """)
         
     with st.expander("💧 Humedad Relativa (Peso: 0.10 Inverso)"):
-        st.markdown("""
-        **Comportamiento Físico:** Modulado en el código como $\\text{Sequedad} = 100 - \\text{HR}$. Bajo el 25% la biomasa pierde su resistencia térmica molecular.
+        st.markdown(r"""
+        **Comportamiento Físico:** Modulado en el código como $\text{Sequedad} = 100 - \text{HR}$. Bajo el 25% la biomasa pierde su resistencia térmica molecular.
         * 🔴 **0 – 25 %:** Riesgo Extremo (Arde incluso material verde).
         * 🟡 **25 – 50 %:** Riesgo Moderado.
         * 🟢 **50+ %:** Riesgo Bajo.
         """)
         
     with st.expander("⛰️ Pendiente del Terreno (Peso: 0.10)"):
-        st.markdown("""
-        **Comportamiento Físico:** Emula el factor $\\Phi_s$ de Rothermel. En laderas pronunciadas, las llamas calientan la vegetación superior por radiación directa, haciendo que el fuego ascienda hasta **4 veces más rápido**.
+        st.markdown(r"""
+        **Comportamiento Físico:** Emula el factor $\Phi_s$ de Rothermel. En laderas pronunciadas, las llamas calientan la vegetación superior por radiación directa, haciendo que el fuego ascienda hasta **4 veces más rápido**.
         * 🟢 **0 – 30 %:** Terreno Accesible.
         * 🟡 **30 – 65 %:** Terreno Difícil.
         * 🔴 **65+ %:** Inaccesible para brigadas terrestres.
         """)
 
     with st.expander("⏳ Tiempo de propagación (Ventana de Simulación)"):
-        st.markdown("""
-        **Ecuación Lineal Directa:** Multiplica el alcance geodésico total: $\\text{Alcance (km)} = \\text{Velocidad} \\times \\text{Tiempo}$.
+        st.markdown(r"""
+        **Ecuación Lineal Directa:** Multiplica el alcance geodésico total: $\text{Alcance (km)} = \text{Velocidad} \times \text{Tiempo}$.
         * 🟢 **1 – 6 h:** Ventana inicial crítica para contención rápida.
         * 🟡 **6 – 24 h:** Incendio activo con propagación entre comunas.
         * 🔴 **24+ h:** Siniestro masivo de escala provincial.
         """)
 
     with st.expander("📍 Comuna de origen y Enfoque Geográfico"):
-        st.markdown("""
-        **Comportamiento:** Define el Variable epicentro geográfico. El simulador calcula el cono basándose en distancias euclidianas. Las zonas costeras como *Arauco* o *Lebu* tienen mayor recurrencia histórica debido a la fuerte densidad e influencia de vientos marinos.
+        st.markdown(r"""
+        **Comportamiento:** Define el epicentro geográfico. El simulador calcula el cono basándose en distancias euclidianas. Las zonas costeras como *Arauco* o *Lebu* tienen mayor recurrencia histórica debido a la fuerte densidad e influencia de vientos marinos.
         """)
