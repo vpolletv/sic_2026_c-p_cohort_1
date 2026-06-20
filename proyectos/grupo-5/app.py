@@ -16,7 +16,7 @@ st.set_page_config(
 st.title("🚨 Sistema Integrado de Alertas, Mitigación y Planes de Evacuación")
 st.markdown("### Centro de Operaciones de Emergencia (COE) | SIC 2026 - Grupo 5")
 
-# Diccionario operativo de albergues habilitados por comuna para la sección logística
+# Diccionario de albergues habilitados por comuna para la sección de logística operativa
 albergues_biobio = {
     "Concepción": "Gimnasio Municipal (Av. Collao 525) - Abierto 24/7",
     "Los Ángeles": "Liceo Comercial (Ricardo Vicuña 310) - Zona de Resguardo",
@@ -82,7 +82,7 @@ try:
     df_comunas, datos_biobio = inicializar_sistema()
 except Exception as e:
     st.error(f"❌ Error crítico en el enrutamiento de archivos locales: {e}")
-    st.info("Asegúrese de que el dataset se ubique exactamente en: proyectos/grupo-5/data/")
+    st.info("Asegúrese de que el dataset se ubique exactamente en la subcarpeta 'data/'")
     st.stop()
 
 # ==============================================================================
