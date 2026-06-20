@@ -6,7 +6,8 @@ st.set_page_config(page_title="Dashboard Fashion Boutique", layout="wide")
 
 @st.cache_data
 def load_data():
-    return pd.read_csv('data/dataset_limpio.csv')
+    # Ruta completa desde la raíz del repositorio
+    return pd.read_csv('proyectos/equipo-9/data/dataset_limpio.csv')
 
 try:
     df = load_data()
