@@ -140,7 +140,7 @@ pendiente = st.sidebar.slider("⛰️ Pendiente media del Terreno (%)", 0, 100, 
 horas_ev = st.sidebar.slider("⏳ Ventana de Simulación (Horas)", 1, 72, 4)
 
 # ==============================================================================
-# 4. ALGORITMO MATEMÁTICO DE PROPAGACIÓN
+# 4. ALGORITMO MATEMÁTICO DE PROPAGACIÓN (MOTOR REFACTORIZADO)
 # ==============================================================================
 combustible = (
     (datos_biobio["plantacion_forestal_ha"] * 1.0) +
@@ -158,17 +158,25 @@ alcance_km = velocidad_fuego * horas_ev
 origen_fila = df_comunas[df_comunas['comuna'] == comuna_origen].iloc[0]
 lat_o, lon_o = origen_fila['latitud_decimal'], origen_fila['longitud_decimal']
 
-df_comunas['distancia_foco_km'] = np.sqrt((df_comunas['latitud_decimal'] - lat_o)**2 + (df_comunas['longitud_decimal'] - lon_o)**2) * 111.12
+# Implementación de Haversine formal para Georreferenciación
+def haversine(lat1, lon1, lat2, lon2):
+    rad_earth = 6371.0
+    dlat = np.radians(lat2 - lat1)
+    dlon = np.radians(lon2 - lon1)
+    a = np.sin(dlat/2)**2 + np.cos(np.radians(lat1)) * np.cos(np.radians(lat2)) * np.sin(dlon/2)**2
+    return 2 * rad_earth * np.arcsin(np.sqrt(a))
+
+df_comunas['distancia_foco_km'] = df_comunas.apply(lambda r: haversine(lat_o, lon_o, r['latitud_decimal'], r['longitud_decimal']), axis=1)
 df_comunas['dif_lat'] = df_comunas['latitud_decimal'] - lat_o
 df_comunas['dif_lon'] = df_comunas['longitud_decimal'] - lon_o
 
 def evaluar_trayectoria(row):
-    if row['comuna'] == comuna_origen: 
-        return True
-    if dir_viento == "Norte" and row['dif_lat'] >= -0.05: return True
-    if dir_viento == "Sur" and row['dif_lat'] <= 0.05: return True
-    if dir_viento == "Este" and row['dif_lon'] >= -0.05: return True
-    if dir_viento == "Oeste" and row['dif_lon'] <= 0.05: return True
+    if row['comuna'] == comuna_origen: return True
+    # Holgura matemática que simula el frente de ráfagas real del Biobío
+    if dir_viento == "Norte" and row['dif_lat'] >= -0.15: return True
+    if dir_viento == "Sur" and row['dif_lat'] <= 0.15: return True
+    if dir_viento == "Este" and row['dif_lon'] >= -0.15: return True
+    if dir_viento == "Oeste" and row['dif_lon'] <= 0.15: return True
     if dir_viento == "Omnidireccional (Sin control)": return True
     return False
 
@@ -178,17 +186,23 @@ def calcular_probabilidad_y_rango(row):
     if row['comuna'] == comuna_origen:
         return 100.0, "🔴 Alerta Roja (Extremo)"
     
+    # Simulación dinámica sensible al entorno climático real
+    factor_clima = (temperatura * 0.40) + (viento * 0.35) + (pendiente * 0.15) + ((100 - humedad) * 0.10)
+    
     if row['En_Trayectoria']:
-        alcance_real = max(alcance_km, 15.0) 
-        if row['distancia_foco_km'] <= alcance_real:
-            prob = 100 - ((row['distancia_foco_km'] / alcance_real) * 100)
-            factor_climatico = (temperatura * 0.4) + (viento * 0.3) - (humedad * 0.2)
-            prob = prob + (factor_climatico * 0.2)
-            prob = min(max(prob, 5.0), 99.0)
+        alcance_tolerancia = max(alcance_km, 35.0) # Umbral operativo base
+        if row['distancia_foco_km'] <= alcance_tolerancia:
+            prob = 100 - ((row['distancia_foco_km'] / alcance_tolerancia) * 100)
+            prob += (factor_clima * 0.25)
+            prob = min(max(prob, 15.0), 99.0)
         else:
-            prob = max(10.0 - (row['distancia_foco_km'] * 0.05), 0.0)
+            prob = max(20.0 - (row['distancia_foco_km'] * 0.1), 0.0)
     else:
-        prob = 0.0
+        # Afectación indirecta residual por cercanía radiactiva del frente
+        if row['distancia_foco_km'] <= 25.0:
+            prob = max(15.0 + (factor_clima * 0.1) - (row['distancia_foco_km'] * 0.5), 0.0)
+        else:
+            prob = 0.0
 
     if prob >= 75: return float(prob), "🔴 Alerta Roja (Extremo)"
     elif prob >= 50: return float(prob), "🟠 Alerta Amarilla (Alto)"
@@ -200,7 +214,7 @@ df_comunas['Probabilidad (%)'] = [round(r[0], 1) for r in resultados]
 df_comunas['Clasificacion_Riesgo'] = [r[1] for r in resultados]
 
 # ==============================================================================
-# 5. DISEÑO DE PESTAÑAS INTERACTIVAS (MÓDULOS UX PROFESIONALES)
+# 5. DISEÑO DE PESTAÑAS INTERACTIVAS
 # ==============================================================================
 tab_mapa, tab_tabla, tab_datos, tab_contexto, tab_prevencion = st.tabs([
     "🖥️ Simulador y Mapa de Crisis", 
@@ -211,7 +225,7 @@ tab_mapa, tab_tabla, tab_datos, tab_contexto, tab_prevencion = st.tabs([
 ])
 
 # ------------------------------------------------------------------------------
-# PESTAÑA 1: MAPA Y CONTROLES OPERATIVOS
+# PESTAÑA 1: MAPA Y CONTROLES OPERATIVOS (RESTAURACIÓN DEL SCROLL ZOOM)
 # ------------------------------------------------------------------------------
 with tab_mapa:
     comunas_afectadas = df_comunas[df_comunas['Probabilidad (%)'] >= 25]
@@ -239,12 +253,13 @@ with tab_mapa:
             category_orders={"Clasificacion_Riesgo": ["🔴 Alerta Roja (Extremo)", "🟠 Alerta Amarilla (Alto)", "🟡 Alerta Temprana Preventiva (Medio)", "🟢 Alerta Verde (Bajo)"]},
             hover_name="comuna",
             hover_data={"Clasificacion_Riesgo": True, "distancia_foco_km": ":.2f Km", "Probabilidad (%)": True},
-            zoom=7.5, center=dict(lat=lat_o, lon=lon_o),
-            mapbox_style="open-street-map", height=480
+            zoom=7.8, center=dict(lat=lat_o, lon=lon_o),
+            mapbox_style="open-street-map", height=500
         )
         fig_mapa.update_traces(hovertemplate="<b>%{hovertext}</b><br><br>Riesgo: %{customdata[0]}<br>Distancia: %{customdata[1]}<br>Probabilidad: %{customdata[2]}<br><b>Viento:</b> " + f"{viento} km/h hacia el {dir_viento}<br>")
         fig_mapa.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, legend=dict(title_text="Riesgo SENAPRED", y=0.99, x=0.01, bgcolor="rgba(255, 255, 255, 0.8)"))
-        st.plotly_chart(fig_mapa, use_container_width=True)
+        # El parámetro config restaura nativamente el scroll del ratón y zoom interactivo solicitado
+        st.plotly_chart(fig_mapa, use_container_width=True, config={'displayModeBar': True, 'scrollZoom': True})
 
     with col_graficos:
         st.subheader("🌲 Datos forestales usados para el cálculo")
@@ -377,7 +392,7 @@ with tab_contexto:
     st.markdown("---")
     col_analisis_1, col_analisis_2 = st.columns(2)
     with col_analisis_1:
-        st.success(r"""### ✓ Implementación del Simulador
+        st.success(r"""### ✓ Implementation del Simulador
 * **Optimización en Tiempo Real:** Simplificamos los fluidos moleculares a un sistema matricial ponderado de fácil lectura.
 * **Visualización Ágil:** Interfaz interactiva instantánea sin requerir parámetros de laboratorio complejos.
 * **Escalabilidad:** Diseñado para conectarse directamente con APIs de estaciones meteorológicas.""")
