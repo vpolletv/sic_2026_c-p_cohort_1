@@ -36,10 +36,10 @@ albergues_biobio = {
 # ==============================================================================
 @st.cache_data
 def inicializar_sistema():
-    base_path = os.path.dirname(os.path.abspath(__file__))
+    base_path = os.path.dirname(os.path.abspath(__file__)) #temporal, eliminar cuando app-revision suba de dir
     
-    archivo_comunas = "Latitud - Longitud Chile.csv"
-    archivo_bosques = "biobio_limpio.csv"
+    archivo_comunas = "biobio_limpio.csv"
+    archivo_bosques = "bosques_chile_excel.csv"
     
     rutas_comunas_posibles = [
         os.path.join(base_path, "data", archivo_comunas),
@@ -52,7 +52,7 @@ def inicializar_sistema():
         os.path.join(base_path, archivo_bosques),
         archivo_bosques
     ]
-    
+   
     df_c = None
     for r in rutas_comunas_posibles:
         if os.path.exists(r):
@@ -69,7 +69,7 @@ def inicializar_sistema():
             except:
                 df_b = pd.read_csv(r, sep=',')
             break
-
+        
     if df_c is None:
         df_c = pd.DataFrame({
             'Comuna': ['Concepción', 'Los Ángeles', 'Talcahuano', 'Coronel', 'Hualpén', 'Chiguayante', 'San Pedro de la Paz', 'Penco', 'Tomé', 'Lota'],
@@ -79,7 +79,7 @@ def inicializar_sistema():
             'Latitud (Decimal)': [-36.8150, -37.4697, -36.7358, -36.9819, -36.7932, -36.9089, -36.8639, -36.7419, -36.6167, -37.0889],
             'Longitud (decimal)': [-73.0289, -72.3508, -73.1050, -73.1569, -73.1678, -73.0278, -73.1078, -72.9978, -72.9500, -73.1550]
         })
-
+    
     if df_b is None:
         vegetacion = {
             "plantacion_forestal_ha": 875178.4,
@@ -88,20 +88,22 @@ def inicializar_sistema():
             "humedales_ha": 10172.8,
             "bosques_total_ha": 1524387.0
         }
+
     else:
+        
         df_b.columns = [c.strip() for c in df_b.columns]
-        df_b['Región'] = df_b['Región'].str.strip() if 'Región' in df_b.columns else df_b.iloc[:,0].str.strip()
+        df_b['region'] = df_b['region'].str.strip() if 'region' in df_b.columns else df_b.iloc[:,0].str.strip()
         
         def limpiar_numero_chileno(val):
             if pd.isna(val): return 0.0
             return float(str(val).strip().replace('.', '').replace(',', '.'))
         
-        row_biobio = df_b[df_b['Región'].astype(str).str.contains('Bio')].iloc[0]
+        row_biobio = df_b[df_b['region'].astype(str).str.contains('Bio')].iloc[0]
         
-        p_for = row_biobio['Plantación Forestal'] if 'Plantación Forestal' in df_b.columns else 875178.4
-        b_nat = row_biobio['Bosque Nativo'] if 'Bosque Nativo' in df_b.columns else (row_biobio['Bosque Native'] if 'Bosque Native' in df_b.columns else 597572.7)
-        b_mix = row_biobio['Bosque Mixto'] if 'Bosque Mixto' in df_b.columns else 51635.9
-        b_tot = row_biobio['Total'] if 'Total' in df_b.columns else 1524387.0
+        p_for = row_biobio['plantacion_forestal'] if 'plantacion_forestal' in df_b.columns else 875178.4
+        b_nat = row_biobio['bosque_nativo'] if 'bosque_nativo' in df_b.columns else (row_biobio['Bosque Native'] if 'Bosque Native' in df_b.columns else 597572.7)
+        b_mix = row_biobio['bosque_mixto'] if 'bosque_mixto' in df_b.columns else 51635.9
+        b_tot = row_biobio['total'] if 'total' in df_b.columns else 1524387.0
         
         vegetacion = {
             "plantacion_forestal_ha": limpiar_numero_chileno(p_for),
@@ -111,16 +113,15 @@ def inicializar_sistema():
             "bosques_total_ha": limpiar_numero_chileno(b_tot)
         }
 
-    df_c['Región_Clean'] = df_c['Región'].astype(str).str.lower()
+    df_c['Región_Clean'] = df_c['region'].astype(str).str.lower()
     df_comunas_biobio = df_c[df_c['Región_Clean'].str.contains('bio', na=False)].copy()
     
-    df_comunas_biobio['comuna'] = df_comunas_biobio['Comuna'].str.strip()
-    df_comunas_biobio['latitud_decimal'] = pd.to_numeric(df_comunas_biobio['Latitud (Decimal)'], errors='coerce')
-    df_comunas_biobio['longitud_decimal'] = pd.to_numeric(df_comunas_biobio['Longitud (decimal)'], errors='coerce')
-    
-    df_comunas_biobio['poblacion_2017'] = df_comunas_biobio['Población Año 2017'].astype(str).str.replace(',', '').str.replace('.', '').astype(int)
+    df_comunas_biobio['comuna'] = df_comunas_biobio['comuna'].str.strip()
+    df_comunas_biobio['latitud_decimal'] = pd.to_numeric(df_comunas_biobio['latitud_decimal'], errors='coerce')
+    df_comunas_biobio['longitud_decimal'] = pd.to_numeric(df_comunas_biobio['longitud_decimal'], errors='coerce')
+    df_comunas_biobio['poblacion_2017'] = df_comunas_biobio['poblacion_2017'].astype(str).str.replace(',', '').str.replace('.', '').astype(int)
     df_comunas_biobio = df_comunas_biobio.dropna(subset=['latitud_decimal', 'longitud_decimal'])
-    
+   
     return df_comunas_biobio, vegetacion
 
 df_comunas, datos_biobio = inicializar_sistema()
@@ -401,7 +402,7 @@ with tab_tabla:
     st.markdown("---")
     col_tab_izq, col_tab_der = st.columns([1, 1])
     
-    df_tabla_limpia = df_comunas[['comuna', 'Provincia', 'poblacion_2017', 'distancia_foco_km', 'Probabilidad (%)', 'Clasificacion_Riesgo']].sort_values(by='Probabilidad (%)', ascending=False)
+    df_tabla_limpia = df_comunas[['comuna', 'provincia', 'poblacion_2017', 'distancia_foco_km', 'Probabilidad (%)', 'Clasificacion_Riesgo']].sort_values(by='Probabilidad (%)', ascending=False)
     df_tabla_limpia.columns = ['Comuna', 'Provincia', 'Población (Censo)', 'Distancia al Foco (Km)', 'Probabilidad de Impacto', 'Nivel de Riesgo']
 
     with col_tab_izq:
