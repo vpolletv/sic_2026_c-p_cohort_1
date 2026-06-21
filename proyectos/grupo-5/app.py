@@ -23,7 +23,7 @@ albergues_biobio = {
     "Coronel": "Escuela Básica Manuel Montt - Habilitado como Refugio",
     "Hualpén": "Liceo Pedro del Río Zañartu - Zona Segura de Evacuación",
     "Chiguayante": "Gimnasio Machasa - Punto de Encuentro Familiar",
-    "San Pedro de La Paz": "Colegio Concepción (San Pedro) - Albergue Activo",
+    "San Pedro de la Paz": "Colegio Concepción (San Pedro) - Albergue Activo",
     "Penco": "Escuela Patricio Lynch - Zona de Resguardo Temporal",
     "Tomé": "Internado Bellavista - Centro de Atención de Emergencias",
     "Lota": "Liceo Carlos Cousiño - Zona de Seguridad Civil"
@@ -37,7 +37,7 @@ def inicializar_sistema():
     base_path = os.path.dirname(os.path.abspath(__file__))
     
     archivo_comunas = "Latitud - Longitud Chile.csv"
-    archivo_bosques = "biobio_limpio.csv"  # Adaptado al nombre real en tu repositorio
+    archivo_bosques = "biobio_limpio.csv"
     
     rutas_comunas_posibles = [
         os.path.join(base_path, "data", archivo_comunas),
@@ -60,7 +60,6 @@ def inicializar_sistema():
     df_b = None
     for r in rutas_bosques_posibles:
         if os.path.exists(r):
-            # Se detecta si usa coma o punto y coma como separador de forma dinámica
             try:
                 df_b = pd.read_csv(r, sep=';')
                 if df_b.shape[1] <= 1:
@@ -88,7 +87,6 @@ def inicializar_sistema():
             "bosques_total_ha": 1524387.0
         }
     else:
-        # Normalizar nombres de columnas si vienen en un formato modificado de limpieza
         df_b.columns = [c.strip() for c in df_b.columns]
         df_b['Región'] = df_b['Región'].str.strip() if 'Región' in df_b.columns else df_b.iloc[:,0].str.strip()
         
@@ -96,10 +94,8 @@ def inicializar_sistema():
             if pd.isna(val): return 0.0
             return float(str(val).strip().replace('.', '').replace(',', '.'))
         
-        # Filtro tolerante de la fila de la región
         row_biobio = df_b[df_b['Región'].astype(str).str.contains('Bio')].iloc[0]
         
-        # Mapeo inteligente de variables según cabeceras típicas
         p_for = row_biobio['Plantación Forestal'] if 'Plantación Forestal' in df_b.columns else 875178.4
         b_nat = row_biobio['Bosque Nativo'] if 'Bosque Nativo' in df_b.columns else (row_biobio['Bosque Native'] if 'Bosque Native' in df_b.columns else 597572.7)
         b_mix = row_biobio['Bosque Mixto'] if 'Bosque Mixto' in df_b.columns else 51635.9
@@ -167,11 +163,12 @@ df_comunas['dif_lat'] = df_comunas['latitud_decimal'] - lat_o
 df_comunas['dif_lon'] = df_comunas['longitud_decimal'] - lon_o
 
 def evaluar_trayectoria(row):
-    if row['comuna'] == comuna_origen: return True
-    if dir_viento == "Norte" and row['dif_lat'] > 0: return True
-    if dir_viento == "Sur" and row['dif_lat'] < 0: return True
-    if dir_viento == "Este" and row['dif_lon'] > 0: return True
-    if dir_viento == "Oeste" and row['dif_lon'] < 0: return True
+    if row['comuna'] == comuna_origen: 
+        return True
+    if dir_viento == "Norte" and row['dif_lat'] >= -0.05: return True
+    if dir_viento == "Sur" and row['dif_lat'] <= 0.05: return True
+    if dir_viento == "Este" and row['dif_lon'] >= -0.05: return True
+    if dir_viento == "Oeste" and row['dif_lon'] <= 0.05: return True
     if dir_viento == "Omnidireccional (Sin control)": return True
     return False
 
@@ -180,11 +177,19 @@ df_comunas['En_Trayectoria'] = df_comunas.apply(evaluar_trayectoria, axis=1)
 def calcular_probabilidad_y_rango(row):
     if row['comuna'] == comuna_origen:
         return 100.0, "🔴 Alerta Roja (Extremo)"
-    if row['distancia_foco_km'] <= alcance_km and row['En_Trayectoria']:
-        prob = 100 - ((row['distancia_foco_km'] / alcance_km) * 100)
-        prob = min(max(prob, 0), 100)
+    
+    if row['En_Trayectoria']:
+        alcance_real = max(alcance_km, 15.0) 
+        if row['distancia_foco_km'] <= alcance_real:
+            prob = 100 - ((row['distancia_foco_km'] / alcance_real) * 100)
+            factor_climatico = (temperatura * 0.4) + (viento * 0.3) - (humedad * 0.2)
+            prob = prob + (factor_climatico * 0.2)
+            prob = min(max(prob, 5.0), 99.0)
+        else:
+            prob = max(10.0 - (row['distancia_foco_km'] * 0.05), 0.0)
     else:
         prob = 0.0
+
     if prob >= 75: return float(prob), "🔴 Alerta Roja (Extremo)"
     elif prob >= 50: return float(prob), "🟠 Alerta Amarilla (Alto)"
     elif prob >= 25: return float(prob), "🟡 Alerta Temprana Preventiva (Medio)"
@@ -211,13 +216,13 @@ tab_mapa, tab_tabla, tab_datos, tab_contexto, tab_prevencion = st.tabs([
 with tab_mapa:
     comunas_afectadas = df_comunas[df_comunas['Probabilidad (%)'] >= 25]
     poblacion_afectada = comunas_afectadas['poblacion_2017'].sum()
-    viviendas_afectadas = poblacion_afectada / 3.2
+    vividendas_afectadas = poblacion_afectada / 3.2
 
     m1, m2, m3, m4 = st.columns(4)
     with m1: st.metric("Índice de Gravedad (IP)", f"{ip:.1f} %")
     with m2: st.metric("Velocidad de Avance Frontal", f"{velocidad_fuego:.2f} km/h")
     with m3: st.metric("Población Civil en Riesgo", f"{poblacion_afectada:,.0f} hab")
-    with m4: st.metric("Estimación de Viviendas en Riesgo", f"{viviendas_afectadas:,.0f} casas")
+    with m4: st.metric("Estimación de Viviendas en Riesgo", f"{vividendas_afectadas:,.0f} casas")
 
     st.markdown("---")
     col_mapa, col_graficos = st.columns([2, 1])
@@ -239,7 +244,7 @@ with tab_mapa:
         )
         fig_mapa.update_traces(hovertemplate="<b>%{hovertext}</b><br><br>Riesgo: %{customdata[0]}<br>Distancia: %{customdata[1]}<br>Probabilidad: %{customdata[2]}<br><b>Viento:</b> " + f"{viento} km/h hacia el {dir_viento}<br>")
         fig_mapa.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, legend=dict(title_text="Riesgo SENAPRED", y=0.99, x=0.01, bgcolor="rgba(255, 255, 255, 0.8)"))
-        st.plotly_chart(fig_mapa, use_container_width=True, config={'displayModeBar': True, 'scrollZoom': True})
+        st.plotly_chart(fig_mapa, use_container_width=True)
 
     with col_graficos:
         st.subheader("🌲 Datos forestales usados para el cálculo")
@@ -250,22 +255,33 @@ with tab_mapa:
         fig_bar = px.bar(
             df_veg, x='Hectáreas', y='Tipo Cobertura', orientation='h',
             color='Tipo Cobertura', color_discrete_sequence=['#A12312', '#345922', '#6E8131', '#417392'],
-            text='Hectáreas', height=480
+            text='Hectáreas', height=230
         )
         fig_bar.update_traces(texttemplate='%{text:,.1f} ha', textposition='outside')
         fig_bar.update_layout(showlegend=False, xaxis_title="Superficie en Hectáreas", yaxis_title="", margin={"r":30,"t":10,"l":10,"b":10})
         st.plotly_chart(fig_bar, use_container_width=True)
 
+        st.markdown("---")
+        st.subheader("📊 Distribución Porcentual del Combustible")
+        fig_pie = px.pie(
+            df_veg, values='Hectáreas', names='Tipo Cobertura', color='Tipo Cobertura',
+            color_discrete_sequence=['#A12312', '#345922', '#6E8131', '#417392'], height=230
+        )
+        fig_pie.update_layout(margin={"r":10,"t":10,"l":10,"b":10}, showlegend=True)
+        st.plotly_chart(fig_pie, use_container_width=True)
+
     st.markdown("---")
     st.subheader("📋 Logística Operativa y Plan de Evacuación Civil")
     col_izq, col_der = st.columns(2)
     with col_izq:
-        st.markdown("### 🏃‍♂️ Rutas de Evacuación Sugeridas")
+        st.markdown("### 🏃‍♂️ Rutas de Evacuación y Refugios")
         comunas_peligrosas = df_comunas[df_comunas['Probabilidad (%)'] >= 50]
         if not comunas_peligrosas.empty:
             for com in comunas_peligrosas['comuna'].unique():
                 ruta_sugerida = "Eje Vial Ruta 160 Sur" if dir_viento == "Norte" else "Eje Vial Ruta 5 Sur / Autopista del Itata"
                 st.markdown(f"* **{com}:** Evacuar preventivamente vía **{ruta_sugerida}**.")
+                if com in albergues_biobio:
+                    st.caption(f"🏠 **Albergue de Referencia:** {albergues_biobio[com]}")
         else: st.success("✓ Todos los caminos y conectividades se encuentran estables.")
     with col_der:
         st.markdown("### 🚨 Central de Comunicaciones de Emergencia")
@@ -323,7 +339,7 @@ with tab_datos:
     )
 
 # ------------------------------------------------------------------------------
-# PESTAÑA 4: CONTEXTO CIENTÍFICO (CADENAS RAW EVITAN UNICODE ERRORS)
+# PESTAÑA 4: CONTEXTO CIENTÍFICO
 # ------------------------------------------------------------------------------
 with tab_contexto:
     st.subheader("🧪 Fundamentos del Simulador Técnico")
@@ -372,7 +388,7 @@ with tab_contexto:
 * **Sin Mitigación Dinámica:** No considera el impacto de bomberos, brigadas terrestres ni aeronaves de combate.""")
 
 # ------------------------------------------------------------------------------
-# PESTAÑA 5: PLAN DE PREVENCIÓN (CADENAS RAW EVITAN UNICODE ERRORS)
+# PESTAÑA 5: PLAN DE PREVENCIÓN
 # ------------------------------------------------------------------------------
 with tab_prevencion:
     st.subheader("🌲 Institucionalidad y Escala de Alertas SENAPRED / CONAF")
@@ -440,4 +456,12 @@ with tab_prevencion:
     with st.expander("📍 Comuna de origen y Enfoque Geográfico"):
         st.markdown(r"""
         **Comportamiento:** Define el epicentro geográfico. El simulador calcula el cono basándose en distancias euclidianas. Las zonas costeras como *Arauco* o *Lebu* tienen mayor recurrencia histórica debido a la fuerte densidad e influencia de vientos marinos.
+        """)
+
+    with st.expander("🌲 Carga de Combustible y Biomasa Forestal (Peso: 0.30)"):
+        st.markdown(r"""
+        **Comportamiento Físico:** Representa la continuidad de la biomasa disponible para arder. Las plantaciones de monocultivo (pino/eucalipto) tienen mayor continuidad vertical y horizontal, acelerando la propagación frente al bosque nativo o los humedales que actúan como barreras húmedas.
+        * 🔴 **Plantaciones Forestales:** Combustión de alta intensidad y rápida propagación.
+        * 🟡 **Bosque Mixto / Nativo:** Combustión moderada dependiente del estrés hídrico.
+        * 🟢 **Humedales:** Zonas de amortiguación natural con baja susceptibilidad de ignición.
         """)
