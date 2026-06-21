@@ -392,7 +392,7 @@ with tab_contexto:
     st.markdown("---")
     col_analisis_1, col_analisis_2 = st.columns(2)
     with col_analisis_1:
-        st.success(r"""### ✓ Implementation del Simulador
+        st.success(r"""### ✓ Implementacion del Simulador
 * **Optimización en Tiempo Real:** Simplificamos los fluidos moleculares a un sistema matricial ponderado de fácil lectura.
 * **Visualización Ágil:** Interfaz interactiva instantánea sin requerir parámetros de laboratorio complejos.
 * **Escalabilidad:** Diseñado para conectarse directamente con APIs de estaciones meteorológicas.""")
