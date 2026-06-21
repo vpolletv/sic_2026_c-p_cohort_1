@@ -85,20 +85,7 @@ Antes del lunes 22 de junio a las 22:00 hrs, el equipo debe tener un PR aprobado
 Cada equipo crea su carpeta dentro de `/proyectos/`. El nombre debe ser en minusculas y con guion medio.
 
 ```
-proyectos/
-  nombre-del-equipo/
-    data/
-      dataset_original.csv      <- datos originales (o link si pesa mas de 50 MB)
-      dataset_limpio.csv        <- datos procesados
-    notebooks/
-      01_eda.ipynb
-      02_limpieza.ipynb
-      03_analisis.ipynb
-    outputs/
-      dashboard_preview.png     <- captura del dashboard
-    app.py                      <- app Streamlit principal
-    requirements.txt
-    README.md
+
 ```
 
 > **Atencion:** no subir archivos mayores a 50 MB. Para datasets grandes, subir a Google Drive o Kaggle y poner el link de descarga en el README.
