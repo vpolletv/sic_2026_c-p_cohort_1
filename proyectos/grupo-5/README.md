@@ -67,7 +67,26 @@ $$\text{Alcance (Km)} = \text{Velocidad} \times \text{Tiempo}$$
 
 ---
 
-## 🚦 4. Estandarización de Alertas y Criterios Técnicos (Chile)
+
+## 📚 4. Fuentes de Datos
+
+El simulador utiliza información territorial y forestal proveniente de fuentes públicas institucionales:
+
+- **Catastro de los Recursos Vegetacionales Nativos de Chile (CONAF):**  
+  Se utilizó el Cuadro 5 del informe, ubicado en la página 33 del documento (página 17 del PDF), para obtener la superficie regional de coberturas vegetacionales.
+
+  Fuente:
+  https://sit.conaf.cl/varios/Catastros_Recursos_Vegetacionales_Nativos_de_Chile_Nov2021.pdf
+
+- **Repositorio de comunas de Chile:**  
+  Utilizado para obtener información geográfica y coordenadas comunales necesarias para la representación territorial del simulador.
+
+  Fuente:
+  https://github.com/altazor-1967/Comunas-de-Chile
+
+---
+
+## 🚦 5. Estandarización de Alertas y Criterios Técnicos (Chile)
 
 El sistema integra y traduce las reglas operativas reales de la institucionalidad chilena para clasificar el riesgo en la interfaz cartográfica:
 
@@ -85,7 +104,7 @@ Una vez calculada la distancia geodésica respecto a cada foco, el mapa de dispe
 
 ---
 
-## 📂 5. Estructura Obligatoria del Repositorio
+## 📂 6. Estructura Obligatoria del Repositorio
 ```text
 proyectos/grupo-5/
 ├── data/
