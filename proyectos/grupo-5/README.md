@@ -3,7 +3,7 @@
 Este repositorio contiene el desarrollo del **Proyecto Final** para el curso de **Código y Programación (C&P)** de la **Cohorte 1 (2026)** de **Samsung Innovation Campus Chile**, ejecutado de forma oficial por **Innovacien**.
 
 ### 🔗 Acceso Directo al Dashboard en Producción
-> **URL Pública Operativa:** [https://sic2026c-pcohort1-simulador-incendios.streamlit.app/](https://sic2026c-pcohort1-simulador-incendios.streamlit.app/)
+> **URL Pública Operativa:** [https://sic2026c-pcohort1-simulador-incendios.streamlit.app/](https://simulador-incendios-biobio.streamlit.app/)
 
 ---
 
