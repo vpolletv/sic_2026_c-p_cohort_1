@@ -1,0 +1,26 @@
+# Datasets
+data/*.csv
+!data/*_clean.csv
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Documentation
+pauta.md
+
+# Streamlit secrets
+.streamlit/secrets.toml
