@@ -13,6 +13,7 @@
 # - Texto explicativo del hallazgo principal en lenguaje no técnico.
 
 import os
+from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -73,85 +74,40 @@ def nombre_legible(valor: object, diccionario: dict) -> str:
 # -------------------------------------------------------------------
 # 3. Carga de datos
 # -------------------------------------------------------------------
-@st.cache_data(show_spinner="Cargando dataset procesado...")
-def cargar_datos() -> pd.DataFrame:
+@st.cache_data
+def cargar_datos():
     """
-    Carga el dataset procesado.
+    Carga el dataset procesado usando una ruta robusta.
 
-    Decisión técnica:
-    - Se revisan dos rutas posibles para que el archivo funcione tanto
-      en local como en Streamlit Cloud.
-    - La ruta esperada para la entrega es data/dataset_procesado.csv.
+    Esto permite que la app funcione tanto localmente como en Streamlit Cloud,
+    aunque Streamlit ejecute el proyecto desde una carpeta distinta.
     """
-    rutas_posibles: List[str] = [
-        "data/dataset_procesado.csv",
-        "dataset_procesado.csv",
+
+    base_dir = Path(__file__).resolve().parent
+
+    rutas_posibles = [
+        base_dir / "data" / "dataset_procesado.csv",
+        base_dir / "dataset_procesado.csv",
+        Path.cwd() / "proyectos" / "Equipo_8" / "data" / "dataset_procesado.csv",
+        Path.cwd() / "data" / "dataset_procesado.csv",
+        Path.cwd() / "dataset_procesado.csv",
     ]
 
-    ruta_encontrada = None
     for ruta in rutas_posibles:
-        if os.path.exists(ruta):
-            ruta_encontrada = ruta
-            break
+        if ruta.exists():
+            return pd.read_csv(ruta)
 
-    if ruta_encontrada is None:
-        st.error(
-            "No se encontró el archivo dataset_procesado.csv. "
-            "Ubícalo en data/dataset_procesado.csv o en la misma carpeta de app.py."
-        )
-        st.stop()
+    st.error(
+        "No se encontró el archivo dataset_procesado.csv. "
+        "Debe estar ubicado en proyectos/Equipo_8/data/dataset_procesado.csv"
+    )
 
-    df = pd.read_csv(ruta_encontrada)
+    st.write("Rutas revisadas:")
+    for ruta in rutas_posibles:
+        st.write(str(ruta))
 
-    # Normalización mínima para evitar errores si existen valores nulos.
-    columnas_texto = [
-        "text",
-        "texto_limpio",
-        "sentimiento",
-        "intensidad_sentimiento",
-        "detonante_frustracion",
-        "escenario_sugerido",
-        "prioridad_entrenamiento",
-        "empresa_contactada",
-        "dia_semana",
-    ]
+    st.stop()
 
-    for col in columnas_texto:
-        if col in df.columns:
-            df[col] = df[col].fillna("Sin dato").astype(str)
-
-    # La fecha se convierte a datetime para permitir filtros por rango
-    # y análisis temporal.
-    if "fecha" in df.columns:
-        df["fecha_dt"] = pd.to_datetime(df["fecha"], errors="coerce")
-    elif "created_at" in df.columns:
-        df["fecha_dt"] = pd.to_datetime(df["created_at"], errors="coerce", utc=True).dt.tz_localize(None)
-    else:
-        df["fecha_dt"] = pd.NaT
-
-    # Columnas auxiliares para visualización.
-    df["mes"] = df["fecha_dt"].dt.to_period("M").astype(str)
-    df.loc[df["mes"] == "NaT", "mes"] = "Sin fecha"
-
-    if "detonante_frustracion" in df.columns:
-        df["detonante_legible"] = df["detonante_frustracion"].apply(
-            lambda x: nombre_legible(x, LABELS_DETONANTES)
-        )
-
-    if "sentimiento" in df.columns:
-        df["sentimiento_legible"] = df["sentimiento"].apply(
-            lambda x: nombre_legible(x, LABELS_SENTIMIENTO)
-        )
-
-    if "prioridad_entrenamiento" in df.columns:
-        df["prioridad_legible"] = df["prioridad_entrenamiento"].apply(
-            lambda x: nombre_legible(x, LABELS_PRIORIDAD)
-        )
-
-    return df
-
-
-df = cargar_datos()
 
 
 # -------------------------------------------------------------------
