@@ -113,18 +113,129 @@ def inicializar_sistema():
             "bosques_total_ha": limpiar_numero_chileno(b_tot)
         }
 
-    df_c['Región_Clean'] = df_c['region'].astype(str).str.lower()
-    df_comunas_biobio = df_c[df_c['Región_Clean'].str.contains('bio', na=False)].copy()
-    
-    df_comunas_biobio['comuna'] = df_comunas_biobio['comuna'].str.strip()
-    df_comunas_biobio['latitud_decimal'] = pd.to_numeric(df_comunas_biobio['latitud_decimal'], errors='coerce')
-    df_comunas_biobio['longitud_decimal'] = pd.to_numeric(df_comunas_biobio['longitud_decimal'], errors='coerce')
-    df_comunas_biobio['poblacion_2017'] = df_comunas_biobio['poblacion_2017'].astype(str).str.replace(',', '').str.replace('.', '').astype(int)
-    df_comunas_biobio = df_comunas_biobio.dropna(subset=['latitud_decimal', 'longitud_decimal'])
-   
+    # --------------------------------------------------------------------------
+    # Normalización robusta de columnas comunales
+    # --------------------------------------------------------------------------
+    # Evita errores por columnas tipo Región / region / Latitud (Decimal), etc.
+    mapa_columnas = {
+        "Comuna": "comuna",
+        "Provincia": "provincia",
+        "Región": "region",
+        "Region": "region",
+        "Población Año 2017": "poblacion_2017",
+        "Poblacion Año 2017": "poblacion_2017",
+        "Población 2017": "poblacion_2017",
+        "Poblacion 2017": "poblacion_2017",
+        "Latitud (Decimal)": "latitud_decimal",
+        "Latitud Decimal": "latitud_decimal",
+        "Longitud (decimal)": "longitud_decimal",
+        "Longitud (Decimal)": "longitud_decimal",
+        "Longitud Decimal": "longitud_decimal",
+    }
+
+    df_c = df_c.rename(columns=mapa_columnas)
+    df_c.columns = (
+        df_c.columns
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace("á", "a", regex=False)
+        .str.replace("é", "e", regex=False)
+        .str.replace("í", "i", regex=False)
+        .str.replace("ó", "o", regex=False)
+        .str.replace("ú", "u", regex=False)
+    )
+
+    columnas_necesarias = ["comuna", "region", "poblacion_2017", "latitud_decimal", "longitud_decimal"]
+    faltantes = [c for c in columnas_necesarias if c not in df_c.columns]
+
+    if faltantes:
+        st.error("Faltan columnas necesarias en el archivo de comunas.")
+        st.write("Columnas faltantes:", faltantes)
+        st.write("Columnas detectadas:", df_c.columns.tolist())
+        st.stop()
+
+    df_c["region_clean"] = df_c["region"].astype(str).str.lower()
+    df_comunas_biobio = df_c[df_c["region_clean"].str.contains("bio", na=False)].copy()
+
+    df_comunas_biobio["comuna"] = df_comunas_biobio["comuna"].astype(str).str.strip()
+    df_comunas_biobio["latitud_decimal"] = pd.to_numeric(df_comunas_biobio["latitud_decimal"], errors="coerce")
+    df_comunas_biobio["longitud_decimal"] = pd.to_numeric(df_comunas_biobio["longitud_decimal"], errors="coerce")
+
+    def limpiar_poblacion(valor):
+        """Convierte población a entero sin inflar cifras.
+
+        Casos cubiertos:
+        - 223574 o 223574.0 -> 223574
+        - '223.574' -> 223574
+        - '223,574' -> 223574
+        - '223574' -> 223574
+        """
+        if pd.isna(valor):
+            return 0
+
+        # Si pandas ya lo leyó como número, NO se deben borrar puntos.
+        # Ejemplo: 223574.0 debe quedar 223574, no 2235740.
+        if isinstance(valor, (int, float, np.integer, np.floating)):
+            return int(round(float(valor)))
+
+        texto = str(valor).strip().replace(" ", "")
+
+        # Formato chileno/español con miles y decimal: 1.234,0
+        if "." in texto and "," in texto:
+            texto = texto.replace(".", "").replace(",", ".")
+
+        # Punto como separador de miles: 223.574
+        elif "." in texto:
+            partes = texto.split(".")
+
+            # Si termina en .0 o .00, es decimal de pandas/exportación, no miles.
+            if partes[-1] in ["0", "00"]:
+                texto = partes[0]
+            # Si termina en tres dígitos, se interpreta como separador de miles.
+            elif len(partes[-1]) == 3:
+                texto = texto.replace(".", "")
+            else:
+                texto = texto.replace(".", "")
+
+        # Coma como separador de miles o decimal.
+        elif "," in texto:
+            partes = texto.split(",")
+
+            if partes[-1] in ["0", "00"]:
+                texto = partes[0]
+            elif len(partes[-1]) == 3:
+                texto = texto.replace(",", "")
+            else:
+                texto = texto.replace(",", ".")
+
+        try:
+            numero = int(round(float(texto)))
+        except Exception:
+            return 0
+
+        return numero
+
+    df_comunas_biobio["poblacion_2017"] = df_comunas_biobio["poblacion_2017"].apply(limpiar_poblacion)
+    df_comunas_biobio = df_comunas_biobio.dropna(subset=["latitud_decimal", "longitud_decimal"])
+
+    # Evita duplicados que inflan población, puntos del mapa y sumas de riesgo.
+    df_comunas_biobio = df_comunas_biobio.drop_duplicates(subset=["comuna"], keep="first")
+
     return df_comunas_biobio, vegetacion
 
 df_comunas, datos_biobio = inicializar_sistema()
+
+# Control rápido de calidad de datos poblacionales
+with st.sidebar.expander("🔎 Control de datos", expanded=False):
+    st.write("Comunas cargadas:", len(df_comunas))
+    st.write("Población total cargada:", f"{df_comunas['poblacion_2017'].sum():,.0f}")
+    st.dataframe(
+        df_comunas[['comuna', 'poblacion_2017']]
+        .sort_values('poblacion_2017', ascending=False),
+        hide_index=True,
+        use_container_width=True
+    )
 
 # ==============================================================================
 # 3. PANEL LATERAL: CONTROLES DE CRISIS
@@ -268,15 +379,30 @@ tab_mapa, tab_tabla, tab_datos, tab_contexto, tab_prevencion = st.tabs([
 # PESTAÑA 1: MAPA Y CONTROLES OPERATIVOS (RESTAURACIÓN DEL SCROLL ZOOM)
 # ------------------------------------------------------------------------------
 with tab_mapa:
-    comunas_afectadas = df_comunas[df_comunas['Probabilidad (%)'] >= 25]
-    poblacion_afectada = comunas_afectadas['poblacion_2017'].sum()
-    vividendas_afectadas = poblacion_afectada / 3.2
+    comunas_afectadas = (
+        df_comunas[df_comunas['Probabilidad (%)'] >= 25]
+        .drop_duplicates(subset=['comuna'])
+        .copy()
+    )
+
+    # Métrica superior: población de la(s) comuna(s) seleccionada(s) como foco inicial.
+    # Esto evita confundir la suma de comunas afectadas con la población del foco.
+    poblacion_foco = df_comunas[
+        df_comunas["comuna"].isin(comunas_origen)
+    ].drop_duplicates(subset=["comuna"])["poblacion_2017"].sum()
+
+    viviendas_foco = poblacion_foco / 3.2
 
     m1, m2, m3, m4 = st.columns(4)
     with m1: st.metric("Índice de Gravedad (IP)", f"{ip:.1f} %")
     with m2: st.metric("Velocidad de Avance Frontal", f"{velocidad_fuego:.2f} km/h")
-    with m3: st.metric("Población Civil en Riesgo", f"{poblacion_afectada:,.0f} hab")
-    with m4: st.metric("Estimación de Viviendas en Riesgo", f"{vividendas_afectadas:,.0f} casas")
+    with m3: st.metric("Población de Comuna Focal", f"{poblacion_foco:,.0f} hab")
+    with m4: st.metric("Viviendas Aprox. Comuna Focal", f"{viviendas_foco:,.0f} casas")
+
+    st.caption(
+        "Nota: la población y viviendas superiores corresponden a la comuna seleccionada como foco inicial. "
+        "La tabla inferior mantiene la simulación de comunas potencialmente afectadas."
+    )
 
     st.markdown("---")
     col_mapa, col_graficos = st.columns([2, 1])
